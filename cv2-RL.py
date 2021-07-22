@@ -8,7 +8,8 @@ from pathlib import Path
 
 
 def delete_data(path):
-    """ function deletes data library"""
+    """ function deletes data library
+    :param path: string"""
     files = glob.glob(path + '/*')
     for f in files:
         os.remove(f)
@@ -35,7 +36,6 @@ def record_video(length_secs, path_to_stream, path_to_data):
                 # decode to colored image ( another option is cv2.IMREAD_GRAYSCALE)
                 i = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
                 datetimeobj = datetime.now()  # get time stamp
-                #cv2.imshow('img', i)
                 cv2.imwrite(path_to_data + '/img' + str(datetimeobj) + '.jpg', i)
                 if cv2.waitKey(1) == 27 or (datetimeobj - time_start).seconds > length_secs:  # if user  hit esc
                     break  # exit program
@@ -91,12 +91,14 @@ def main():
     # set parameters
     path_to_stream = 'http://192.168.11.115:8080/?action=streaming'
 
+    # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
     path_to_data_directory = dir_path + '/data'
     path_to_masked_data_directory = dir_path + '/data-m'
 
-    delete_data(path_to_data_directory)
-    delete_data(path_to_masked_data_directory)
+    delete_data(path_to_data_directory)  # deletes content of the data library
+    delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
+
     record_video(30, path_to_stream, path_to_data_directory)
     convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_img)
 
