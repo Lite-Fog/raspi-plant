@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import glob
 from pathlib import Path
+from PIL import Image
 
 
 def delete_data(path):
@@ -43,11 +44,11 @@ def record_video(length_secs, path_to_stream, path_to_data):
         print("Received unexpected status code {}".format(r.status_code))
 
 
-def mask_img(img_path, output_lib, sbool=False, output_ext=".jpeg"):
+def mask_img(img_path, output_lib, sbool=False, output_ext=".jpg"):
     """:param img_path: string, path to the image.
        :param output_lib: string, path to output directory.
        :param sbool: boolean, if True it will save the masked image, default False.
-       :param output_ext: string, type of output image, default jpeg.
+       :param output_ext: string, type of output image, default jpg.
        :returns np.arrays of green and mask_g
        """
 
@@ -84,22 +85,29 @@ def convert_images_to_masked(input_dir, output_dir, mask_function):
     print(len(input_files_names))
     for file in input_files_names:
         mask_function(file, output_lib=output_dir, sbool=True)
+        
+        
+#def jpeg-to-jpg(path):
+#    img = Image.open(path)
+#    rgb_img = img.convert('RGB')
+#    rgb_img.save('image.jpg')
 
 
 def main():
 
     # set parameters
-    path_to_stream = 'http://192.168.11.115:8080/?action=streaming'
+    ## path_to_stream = 'http://192.168.11.115:8080/?action=streaming'  # Wi-Fi Broadcast.
 
     # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
     path_to_data_directory = dir_path + '/data'
     path_to_masked_data_directory = dir_path + '/data-m'
 
-    delete_data(path_to_data_directory)  # deletes content of the data library
-    delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
 
-    record_video(30, path_to_stream, path_to_data_directory)
+    ## delete_data(path_to_data_directory)  # deletes content of the data library
+    delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
+    ## record_video(30, path_to_stream, path_to_data_directory)
+
     convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_img)
 
 
