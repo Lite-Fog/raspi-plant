@@ -87,7 +87,7 @@ def convert_images_to_masked(input_dir, output_dir, mask_function):
         mask_function(file, output_lib=output_dir, sbool=True)
         
         
-#def jpeg-to-jpg(path):
+# def jpeg-to-jpg(path):
 #    img = Image.open(path)
 #    rgb_img = img.convert('RGB')
 #    rgb_img.save('image.jpg')
@@ -96,17 +96,16 @@ def convert_images_to_masked(input_dir, output_dir, mask_function):
 def main():
 
     # set parameters
-    ## path_to_stream = 'http://192.168.11.115:8080/?action=streaming'  # Wi-Fi Broadcast.
+    # path_to_stream = 'http://192.168.11.115:8080/?action=streaming'  # Wi-Fi Broadcast.
 
     # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
     path_to_data_directory = dir_path + '/data'
     path_to_masked_data_directory = dir_path + '/data-m'
 
-
-    ## delete_data(path_to_data_directory)  # deletes content of the data library
+    # delete_data(path_to_data_directory)  # deletes content of the data library
     delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
-    ## record_video(30, path_to_stream, path_to_data_directory)
+    # record_video(30, path_to_stream, path_to_data_directory)
 
     convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_img)
 
