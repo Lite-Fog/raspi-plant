@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import glob
 from pathlib import Path
+import logging
 from PIL import Image
 
 
@@ -44,70 +45,85 @@ def record_video(length_secs, path_to_stream, path_to_data):
         print("Received unexpected status code {}".format(r.status_code))
 
 
-def mask_img(img_path, output_lib, sbool=False, output_ext=".jpg"):
+def mask_fun(img_path, erode_func, output_lib, sbool=False, output_ext=".jpg"):
     """:param img_path: string, path to the image.
+       :param erode_func: function, masking function.
        :param output_lib: string, path to output directory.
        :param sbool: boolean, if True it will save the masked image, default False.
        :param output_ext: string, type of output image, default jpg.
-       :returns np.arrays of green and mask_g
-       """
 
+       :returns np.arrays of g_img, mask_g and img
+
+       """
+    # set cropping parameters:
+    hlc, hrc = 200, 1050
+    # extract img name:
     img_name = os.path.splitext(Path(img_path).name)[0]
 
-    # output names
-    green_img_path = output_lib + '/' + 'gr_' + img_name + output_ext  # output green img path
+    # output name
+    g_img_path = output_lib + '/' + 'gr_' + img_name + output_ext  # output path to g_img
+    # mask_img_path = output_lib + '/' + 'mask_' + img_name + output_ext  # output path to mask
 
-    img = cv2.imread(img_path)[:, 150:1050]  # cv2 read
+    img = cv2.imread(img_path)[:, hlc:hrc]  # cv2 read & crop
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)  # convert to hsv
-    mask = cv2.inRange(hsv, (35, 25, 25), (80, 255, 255))  # mask by green spectrum
+    mask = cv2.inRange(hsv, (35, 25, 25), (80, 255, 255))  # mask by slicing the green spectrum
 
-    # slice out the green
+    # apply the masking:
     imask = mask > 0
-    green = np.zeros_like(img, np.uint8)
+    g_img = np.zeros_like(img, np.uint8)
     mask_g = np.zeros_like(img, np.uint8)
 
     # make white background
-    green.fill(255)
-
-    green[imask] = img[imask]
+    g_img.fill(255)
+    g_img[imask] = img[imask]
     mask_g[~imask] = img[~ imask]
+    mask_g[mask_g != 0] = 255
 
-    if sbool:  # save to directory if sbool == True
-        cv2.imwrite(green_img_path, green)
-        print(green_img_path)
+    # erosion
+    g_img, mask, img = erode_func(img, mask_g)
 
-    return green, mask_g
+    if sbool:  # save to directory
+        cv2.imwrite(g_img_path, g_img)
+        # cv2.imwrite(mask_img_path, mask_g)
+
+    return g_img, mask, img
 
 
-def convert_images_to_masked(input_dir, output_dir, mask_function):
+def erode_function(img, mask, n=3, ite=2):
+    kernel = np.ones((n, n), np.uint8)
+    mask_erosion = cv2.erode(mask, kernel, iterations=ite)
+    imask_erosion = mask_erosion == 0
+    g_img = np.zeros_like(img, np.uint8)
+    g_img.fill(255)
+    g_img[imask_erosion] = img[imask_erosion]
+    return g_img, mask_erosion, img
+
+
+def convert_images_to_masked(input_dir, output_dir, mask_function, erode_function):
 
     input_files_names = glob.glob(input_dir + '/*')
     print(len(input_files_names))
     for file in input_files_names:
-        mask_function(file, output_lib=output_dir, sbool=True)
-        
-        
-# def jpeg-to-jpg(path):
-#    img = Image.open(path)
-#    rgb_img = img.convert('RGB')
-#    rgb_img.save('image.jpg')
+        mask_function(file, erode_function, output_lib=output_dir, sbool=True)
 
 
 def main():
 
     # set parameters
-    # path_to_stream = 'http://192.168.11.115:8080/?action=streaming'  # Wi-Fi Broadcast.
+    path_to_stream = 'http://192.168.11.115:8080/?action=streaming'  # Wi-Fi Broadcast.
 
     # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
     path_to_data_directory = dir_path + '/data'
-    path_to_masked_data_directory = dir_path + '/data-m'
+    path_to_masked_data_directory = dir_path + '/data-m2'
 
-    # delete_data(path_to_data_directory)  # deletes content of the data library
+    # delete content from existing directories.
+    delete_data(path_to_data_directory)  # deletes content of the data library
     delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
-    # record_video(30, path_to_stream, path_to_data_directory)
-
-    convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_img)
+    # create a video.
+    record_video(30, path_to_stream, path_to_data_directory)  # records a video
+    # apply mask.
+    convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_fun, erode_function)
 
 
 if __name__ == "__main__":
