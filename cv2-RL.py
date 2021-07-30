@@ -3,10 +3,17 @@ import requests
 import numpy as np
 from datetime import datetime
 import os
+import sys
 import glob
 from pathlib import Path
 import logging
+import sh
+import argparse
 from PIL import Image
+
+# create logger with 'spam_application'
+logging.getLogger('Raspi_application')
+logging.basicConfig(stream=sys.stdout, filemode='a', level=logging.DEBUG)
 
 
 def delete_data(path):
@@ -14,6 +21,7 @@ def delete_data(path):
     :param path: string"""
     files = glob.glob(path + '/*')
     for f in files:
+        logging.debug(f'Deleting: {f}')
         os.remove(f)
 
 
@@ -28,6 +36,7 @@ def record_video(length_secs, path_to_stream, path_to_data):
     if r.status_code == 200:
         bytes_loc = bytes()
         time_start = datetime.now()
+        logging.debug(f'Start recording at: {time_start}')
         for chunk in r.iter_content(chunk_size=1024):
             bytes_loc += chunk
             a = bytes_loc.find(b'\xff\xd8')  # JPEG start
@@ -40,6 +49,7 @@ def record_video(length_secs, path_to_stream, path_to_data):
                 datetimeobj = datetime.now()  # get time stamp
                 cv2.imwrite(path_to_data + '/img' + str(datetimeobj) + '.jpg', i)
                 if cv2.waitKey(1) == 27 or (datetimeobj - time_start).seconds > length_secs:  # if user  hit esc
+                    logging.debug('End recording.')
                     break  # exit program
     else:
         print("Received unexpected status code {}".format(r.status_code))
@@ -56,7 +66,8 @@ def mask_fun(img_path, erode_func, output_lib, sbool=False, output_ext=".jpg"):
 
        """
     # set cropping parameters:
-    hlc, hrc = 200, 1050
+    hlc, hrc = 100, 1100
+    vlc, vuc = 0, 670
     # extract img name:
     img_name = os.path.splitext(Path(img_path).name)[0]
 
@@ -64,7 +75,7 @@ def mask_fun(img_path, erode_func, output_lib, sbool=False, output_ext=".jpg"):
     g_img_path = output_lib + '/' + 'gr_' + img_name + output_ext  # output path to g_img
     # mask_img_path = output_lib + '/' + 'mask_' + img_name + output_ext  # output path to mask
 
-    img = cv2.imread(img_path)[:, hlc:hrc]  # cv2 read & crop
+    img = cv2.imread(img_path)[vlc:vuc, hlc:hrc]  # cv2 read & crop
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)  # convert to hsv
     mask = cv2.inRange(hsv, (35, 25, 25), (80, 255, 255))  # mask by slicing the green spectrum
 
@@ -89,7 +100,7 @@ def mask_fun(img_path, erode_func, output_lib, sbool=False, output_ext=".jpg"):
     return g_img, mask, img
 
 
-def erode_function(img, mask, n=3, ite=2):
+def erode_function(img, mask, n=2, ite=3):
     kernel = np.ones((n, n), np.uint8)
     mask_erosion = cv2.erode(mask, kernel, iterations=ite)
     imask_erosion = mask_erosion == 0
@@ -99,12 +110,12 @@ def erode_function(img, mask, n=3, ite=2):
     return g_img, mask_erosion, img
 
 
-def convert_images_to_masked(input_dir, output_dir, mask_function, erode_function):
+def convert_images_to_masked(input_dir, output_dir, mask_func, erode_func):
 
     input_files_names = glob.glob(input_dir + '/*')
-    print(len(input_files_names))
+    logging.debug(f'Number of frames to mask: {len(input_files_names)}.')
     for file in input_files_names:
-        mask_function(file, erode_function, output_lib=output_dir, sbool=True)
+        mask_func(file, erode_func, output_lib=output_dir, sbool=True)
 
 
 def main():
@@ -118,10 +129,10 @@ def main():
     path_to_masked_data_directory = dir_path + '/data-m2'
 
     # delete content from existing directories.
-    delete_data(path_to_data_directory)  # deletes content of the data library
+    #delete_data(path_to_data_directory)  # deletes content of the data library
     delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
     # create a video.
-    record_video(30, path_to_stream, path_to_data_directory)  # records a video
+    #record_video(30, path_to_stream, path_to_data_directory)  # records a video
     # apply mask.
     convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_fun, erode_function)
 
