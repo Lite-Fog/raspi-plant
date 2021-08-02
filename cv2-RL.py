@@ -1,4 +1,5 @@
 import cv2
+
 import requests
 import numpy as np
 from datetime import datetime
@@ -7,13 +8,42 @@ import sys
 import glob
 from pathlib import Path
 import logging
-import sh
+import re
+import paramiko
+import time
+
 import argparse
 from PIL import Image
+
+
+""" Raspi-plant interacting module """
 
 # create logger with 'spam_application'
 logging.getLogger('Raspi_application')
 logging.basicConfig(stream=sys.stdout, filemode='a', level=logging.DEBUG)
+
+
+def SSH_open_camera(client, sharpness=0, brightness=0, contrast=0, t=0, res_x=0, res_y=0):
+    """SSH script to start broadcasting on the remote host. """
+    OPENING_CAMERA_CMD = f"mjpg_streamer -i \"input_raspicam.so -br {brightness} -co {contrast} -sh {sharpness} -x {res_x}  -y {res_y}  -fps {t}\" -o output_http.so"
+    logging.debug('opening_camera_CMD: {0}'.format(OPENING_CAMERA_CMD))
+    stdin, stdout, stderr = client.exec_command("./startcam.sh")
+    time.sleep(1)  # bug fix: AttributeError
+    return stdin, stdout, stderr
+
+
+def SSH_shutdown_camera(client):
+    """SSH script to end broadcasting on the remote host"""
+    stdin, stdout, stderr = client.exec_command("ps aux")
+    time.sleep(1)  # bug fix: AttributeError
+    data = stdout.readlines()
+    for line in data:
+        if line.find('mjpg_streamer') != -1:
+            process_to_kill = re.findall('\d+', line)[0]
+            stdin, stdout, stderr = client.exec_command(f"kill {process_to_kill}")
+            time.sleep(1)  # bug fix: AttributeError
+            logging.debug(f'process {process_to_kill} is now gone.')
+            return stdin, stdout, stderr
 
 
 def delete_data(path):
@@ -118,23 +148,81 @@ def convert_images_to_masked(input_dir, output_dir, mask_func, erode_func):
         mask_func(file, erode_func, output_lib=output_dir, sbool=True)
 
 
+def set_working_directories(wd_path):
+    """ function receives the working directory path <wd_path>, searches for all occurrences of dataset written in
+    the applicable form, and then creates 2 new directories with a successive serial number according to the last one
+    found in the search.
+    :param wd_path: string.
+    :return 2-tuple of paths for the new directories which was created.
+    """
+
+    list_subfolders_with_paths = [f.path.split('/')[-1] for f in os.scandir(wd_path) if f.is_dir()]
+    p_data, p_data_m = re.compile('^dataset[0-9]{1,2}'), re.compile('^dataset-m[0-9]{1,2}')  # new datasets' path
+    list_data_libs = sorted([s for s in list_subfolders_with_paths if p_data.match(s)])
+    list_data_m_libs = sorted([s for s in list_subfolders_with_paths if p_data_m.match(s)])
+
+    assert len(list_data_libs) == len(list_data_m_libs), "output libraries directories mismatched: please delete manually."
+
+    if not list_data_libs:  # none datasets directories exist yet.
+
+        path_data, path_data_m = wd_path + '/' + 'dataset0', wd_path + '/' + 'dataset-m0'
+        logging.debug(f'dataset_serial: {0}.')
+        os.mkdir(path_data)
+        os.mkdir(path_data_m)
+        return path_data, path_data_m
+
+    else:
+
+        dataset_serial = str(int(''.join(filter(str.isdigit, list_data_libs[-1])))+1)
+        logging.debug(f'dataset_serial: {dataset_serial}.')
+        dataset_name = 'dataset'+dataset_serial
+        dataset_m_name = 'dataset-m'+dataset_serial
+        path_data, path_data_m = tuple(
+            ''.join(i) for i in zip(tuple((wd_path + '/', wd_path + '/')), tuple((dataset_name, dataset_m_name))))
+        os.mkdir(path_data)
+        os.mkdir(path_data_m)
+        return path_data, path_data_m
+
+
 def main():
 
-    # set parameters
-    path_to_stream = 'http://192.168.11.115:8080/?action=streaming'  # Wi-Fi Broadcast.
+    # set broadcasting parameters
+    raspberrypi_user = "pi"
+    raspberrypi_ip = "192.168.11.115"
+    broadcast_port = str(8080)
+    port = 22
+    raspberrypi_pwd = 'Mancave3090!'
+    path_to_stream = f'http://{raspberrypi_ip}:{broadcast_port}/?action=streaming'  # Wi-Fi Broadcast.
+
+    # ssh connection
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(raspberrypi_ip, port, raspberrypi_user, raspberrypi_pwd)
 
     # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    path_to_data_directory = dir_path + '/data'
-    path_to_masked_data_directory = dir_path + '/data-m2'
+    path_to_data_directory, path_to_masked_data_directory = set_working_directories(dir_path)
+
+    # control
+    logging.debug(f"Path to the data directory: {path_to_data_directory}")
+    logging.debug(f"Path to the masked-data directory: {path_to_masked_data_directory}")
 
     # delete content from existing directories.
-    #delete_data(path_to_data_directory)  # deletes content of the data library
-    delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
-    # create a video.
-    #record_video(30, path_to_stream, path_to_data_directory)  # records a video
-    # apply mask.
-    convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_fun, erode_function)
+    # delete_data(path_to_data_directory)  # deletes content of the data library
+    # delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
+
+    """ create a video. """
+    SSH_open_camera(ssh)
+    # record_video(30, path_to_stream, path_to_data_directory)  # records a video
+    SSH_shutdown_camera(ssh)
+    """ apply mask. """
+    # convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_fun, erode_function)
+
+    logging.info(f"SSH transport is: {ssh.get_transport().active}")
+    logging.info("closing SSH.. ")
+    ssh.close()
+    logging.info("SSH transport is now closed")
 
 
 if __name__ == "__main__":

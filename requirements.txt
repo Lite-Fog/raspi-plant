@@ -32,3 +32,5 @@ tornado==6.1
 traitlets==5.0.5
 urllib3==1.26.6
 wcwidth==0.2.5
+paramiko~=2.7.2
+sh~=1.14.2
