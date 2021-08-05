@@ -15,7 +15,6 @@ import time
 import argparse
 from PIL import Image
 
-
 """ Raspi-plant interacting module """
 
 # create logger with 'spam_application'
@@ -31,6 +30,10 @@ def SSH_open_camera(client, sharpness, brightness, contrast, fps, res_x, res_y, 
     # stdin, stdout, stderr = client.exec_command("./startcam.sh")
     stdin, stdout, stderr = client.exec_command(OPENING_CAMERA_CMD)
     time.sleep(1)  # bug fix: AttributeError
+    for i in reversed(range(10)):
+        time.sleep(1)
+        logging.debug(f"sleeping time... {i}")
+
     return stdin, stdout, stderr
 
 
@@ -49,7 +52,7 @@ def SSH_shutdown_camera(client):
 
 
 def delete_data(path):
-    """ function deletes data library
+    """ function deletes library
     :param path: string"""
     files = glob.glob(path + '/*')
     for f in files:
@@ -74,8 +77,8 @@ def record_video(length_secs, path_to_stream, path_to_data):
             a = bytes_loc.find(b'\xff\xd8')  # JPEG start
             b = bytes_loc.find(b'\xff\xd9')  # JPEG end
             if a != -1 and b != -1:
-                jpg = bytes_loc[a:b+2]  # actual image
-                bytes_loc = bytes_loc[b+2:]  # other information
+                jpg = bytes_loc[a:b + 2]  # actual image
+                bytes_loc = bytes_loc[b + 2:]  # other information
                 # decode to colored image ( another option is cv2.IMREAD_GRAYSCALE)
                 i = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
                 datetimeobj = datetime.now()  # get time stamp
@@ -143,7 +146,6 @@ def erode_function(img, mask, n=2, ite=3):
 
 
 def convert_images_to_masked(input_dir, output_dir, mask_func, erode_func):
-
     input_files_names = glob.glob(input_dir + '/*')
     logging.debug(f'Number of frames to mask: {len(input_files_names)}.')
     for file in input_files_names:
@@ -159,7 +161,7 @@ def set_working_directories(wd_path, debug_mode=False):
     :return 2-tuple of paths for the new directories which was created.
     """
     data_lib_path = wd_path + '/d/'
-    list_subfolders_with_paths = [f.path.split('/')[-1] for f in os.scandir(wd_path+'/d/') if f.is_dir()]
+    list_subfolders_with_paths = [f.path.split('/')[-1] for f in os.scandir(wd_path + '/d/') if f.is_dir()]
     p_data, p_data_m = re.compile('^dataset[0-9]{1,3}'), re.compile('^dataset-m[0-9]{1,3}')  # new datasets' path
     len_1 = len("dataset")
     len_2 = len("dataset-m")
@@ -172,7 +174,9 @@ def set_working_directories(wd_path, debug_mode=False):
     if not list_data_libs:  # none datasets directories exist yet.
 
         path_data, path_data_m = data_lib_path + 'dataset0', data_lib_path + 'dataset-m0'
+
         logging.debug(f'dataset_serial: {0}.')
+
         if not debug_mode:
             os.mkdir(path_data)
             os.mkdir(path_data_m)
@@ -180,10 +184,12 @@ def set_working_directories(wd_path, debug_mode=False):
 
     else:
         dataset_serial = str(list_data_libs[-1] + 1)
+
         logging.debug(f'list_data_libs={list_data_libs}.')
         logging.debug(f'dataset_serial: {dataset_serial}.')
-        dataset_name = 'dataset'+dataset_serial
-        dataset_m_name = 'dataset-m'+dataset_serial
+
+        dataset_name = 'dataset' + dataset_serial
+        dataset_m_name = 'dataset-m' + dataset_serial
         path_data, path_data_m = tuple(
             ''.join(i) for i in zip(tuple((data_lib_path, data_lib_path)), tuple((dataset_name, dataset_m_name))))
         if not debug_mode:
@@ -193,24 +199,37 @@ def set_working_directories(wd_path, debug_mode=False):
 
 
 def main():
+    """ raspi- plant. """
 
     # set broadcasting parameters
-    raspberrypi_user = "pi"
-    raspberrypi_ip = "192.168.11.115"
-    broadcast_port = 8085
-    port = 22
-    raspberrypi_pwd = 'Mancave3090!'
-    path_to_stream = f'http://{raspberrypi_ip}:{str(broadcast_port)}/?action=streaming'  # Wi-Fi Broadcast.
+    RASPI_USER = "pi"
+    RASPI_PI_WIFI = "192.168.11.115"
+    RASPI_PI_ETHERNET = "10.150.180.52"
+    RASPI_PWD = 'Mancave3090!'
+    RASPI_BROADCAST_PORT = 8085
+    SSH_PORT = 22
+    path_to_stream = f'http://{RASPI_PI_WIFI}:{str(RASPI_BROADCAST_PORT)}/?action=streaming'  # Wi-Fi Broadcast.
+
+    parser = argparse.ArgumentParser(description="Raspi-plant")
+    parser.add_argument("-on", "--on", help="start streaming", nargs='+', type=int)
+    parser.add_argument("-off", "--off", help="end streaming", nargs='+', type=str)
+    parser.add_argument("-r", "--record", help="record a video", nargs='+', type=int)
+
+    parser.add_argument("-sa", "--algorithm",
+                        help="choose algorithm: False (default) for full search, True for LSH", nargs='+',
+                        type=bool, default=False)
+    parser.add_argument("-R", "--report", help="create visual report", action="store_true")
+
+    args = parser.parse_args()
 
     # ssh connection
-
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(raspberrypi_ip, port, raspberrypi_user, raspberrypi_pwd)
+    ssh.connect(RASPI_PI_WIFI, SSH_PORT, RASPI_USER, RASPI_PWD)
 
     # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    path_to_data_directory, path_to_masked_data_directory = set_working_directories(dir_path, debug_mode=True)
+    path_to_data_directory, path_to_masked_data_directory = set_working_directories(dir_path, debug_mode=False)
 
     # control
     logging.debug(f"Path to the data directory: {path_to_data_directory}")
@@ -221,12 +240,13 @@ def main():
     # delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
 
     """ create a video. """
-    #SSH_open_camera(ssh, sharpness=50, brightness=50, contrast=50, fps=90, res_x=1080, res_y=720, port=broadcast_port)
-    # record_video(30, path_to_stream, path_to_data_directory)  # records a video
+    SSH_open_camera(ssh, sharpness=50, brightness=50, contrast=50, fps=90, res_x=1080, res_y=720,
+                    port=RASPI_BROADCAST_PORT)
+    record_video(30, path_to_stream, path_to_data_directory)  # records a video
     SSH_shutdown_camera(ssh)
 
     """ apply mask. """
-    # convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_fun, erode_function)
+    convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_fun, erode_function)
 
     logging.info(f"SSH transport is: {ssh.get_transport().active}")
     logging.info("closing SSH.. ")
