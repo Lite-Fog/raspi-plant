@@ -12,6 +12,10 @@ import re
 import paramiko
 import time
 
+# connect to docker daemon
+import docker
+dclient = docker.from_env()
+dclient.containers.run('ryanfb/visualsfm', 'echo hello world')
 import argparse
 from PIL import Image
 
@@ -125,7 +129,7 @@ def record_video(length_secs, path_to_stream, path_to_data):
             if a != -1 and b != -1:
                 jpg = bytes_loc[a:b + 2]  # actual image
                 bytes_loc = bytes_loc[b + 2:]  # other information
-                # decode to colored image ( another option is cv2.IMREAD_GRAYSCALE)
+                # decode to colored image ( another option is cv2.IMREAD_GRAYSChttps://github.com/ryanfb/docker_visualsfm.gitALE)
                 i = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
                 datetimeobj = datetime.now()  # get time stamp
                 cv2.imwrite(path_to_data + '/img' + str(datetimeobj) + '.jpg', i)
@@ -140,7 +144,7 @@ def mask_images(img_path, erode_func, output_lib, sbool=False, output_ext=".jpg"
     """:param img_path: string, path to the image.
        :param erode_func: function, masking function.
        :param output_lib: string, path to output directory.
-       :param sbool: boolean, if True it will save the masked image, default False.
+       :param sbool: boolean, if True it will save the masked image, default Fahttps://github.com/ryanfb/docker_visualsfm.gitlse.
        :param output_ext: string, type of output image, default jpg.
 
        :returns np.arrays of g_img, mask_g and img
@@ -238,10 +242,9 @@ def main():
     # delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
 
     """ create a video. """
-    SSH_open_camera(ssh, sharpness=50, brightness=50, contrast=60, fps=90, res_x=1080, res_y=720,
-                    port=RASPI_BROADCAST_PORT)
-    record_video(28, path_to_stream, path_to_data_directory)  # records a video
-    SSH_shutdown_camera(ssh)
+    #SSH_open_camera(ssh, sharpness=50, brightness=50, contrast=60, fps=90, res_x=1080, res_y=720, port=RASPI_BROADCAST_PORT)
+    #record_video(28, path_to_stream, path_to_data_directory)  # records a video
+    #SSH_shutdown_camera(ssh)
 
     logging.info(f"SSH transport is: {ssh.get_transport().active}")
     logging.info("closing SSH.. ")
@@ -250,6 +253,9 @@ def main():
 
     """ apply mask. """
     convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_images, erode_function)
+
+    dclient = docker.from_env()
+    print(dclient.containers.run('ryanfb/visualsfm', 'echo hello world'))
 
 
 if __name__ == "__main__":
