@@ -23,11 +23,13 @@ logging.getLogger('Raspi_application')
 logging.basicConfig(stream=sys.stdout, filemode='a', level=logging.DEBUG)
 
 
-def SSH_open_camera(client, sharpness=0, brightness=0, contrast=0, t=0, res_x=0, res_y=0):
-    """SSH script to start broadcasting on the remote host. """
-    OPENING_CAMERA_CMD = f"mjpg_streamer -i \"input_raspicam.so -br {brightness} -co {contrast} -sh {sharpness} -x {res_x}  -y {res_y}  -fps {t}\" -o output_http.so"
+def SSH_open_camera(client, sharpness, brightness, contrast, fps, res_x, res_y, port=8080):
+    """SSH script to start broadcasting on the remote host.
+     :params: <mjpg-streamer parameters>"""
+    OPENING_CAMERA_CMD = f"mjpg_streamer -i \"input_raspicam.so -br {brightness} -co {contrast} -sh {sharpness} -x {res_x}  -y {res_y}  -fps {fps}\" -o \'output_http.so -p {port}\'"
     logging.debug('opening_camera_CMD: {0}'.format(OPENING_CAMERA_CMD))
-    stdin, stdout, stderr = client.exec_command("./startcam.sh")
+    # stdin, stdout, stderr = client.exec_command("./startcam.sh")
+    stdin, stdout, stderr = client.exec_command(OPENING_CAMERA_CMD)
     time.sleep(1)  # bug fix: AttributeError
     return stdin, stdout, stderr
 
@@ -148,39 +150,45 @@ def convert_images_to_masked(input_dir, output_dir, mask_func, erode_func):
         mask_func(file, erode_func, output_lib=output_dir, sbool=True)
 
 
-def set_working_directories(wd_path):
+def set_working_directories(wd_path, debug_mode=False):
     """ function receives the working directory path <wd_path>, searches for all occurrences of dataset written in
     the applicable form, and then creates 2 new directories with a successive serial number according to the last one
     found in the search.
     :param wd_path: string.
+    :param debug_mode: in debug_mode=True do not create new directories.
     :return 2-tuple of paths for the new directories which was created.
     """
+    data_lib_path = wd_path + '/d/'
+    list_subfolders_with_paths = [f.path.split('/')[-1] for f in os.scandir(wd_path+'/d/') if f.is_dir()]
+    p_data, p_data_m = re.compile('^dataset[0-9]{1,3}'), re.compile('^dataset-m[0-9]{1,3}')  # new datasets' path
+    len_1 = len("dataset")
+    len_2 = len("dataset-m")
+    list_data_libs = sorted([int(s[len_1:]) for s in list_subfolders_with_paths if p_data.match(s)])
+    list_data_m_libs = sorted([int(s[len_2:]) for s in list_subfolders_with_paths if p_data_m.match(s)])
 
-    list_subfolders_with_paths = [f.path.split('/')[-1] for f in os.scandir(wd_path) if f.is_dir()]
-    p_data, p_data_m = re.compile('^dataset[0-9]{1,2}'), re.compile('^dataset-m[0-9]{1,2}')  # new datasets' path
-    list_data_libs = sorted([s for s in list_subfolders_with_paths if p_data.match(s)])
-    list_data_m_libs = sorted([s for s in list_subfolders_with_paths if p_data_m.match(s)])
-
-    assert len(list_data_libs) == len(list_data_m_libs), "output libraries directories mismatched: please delete manually."
+    assert len(list_data_libs) == len(list_data_m_libs), "output libraries directories mismatched:" \
+                                                         " please delete manually."
 
     if not list_data_libs:  # none datasets directories exist yet.
 
-        path_data, path_data_m = wd_path + '/' + 'dataset0', wd_path + '/' + 'dataset-m0'
+        path_data, path_data_m = data_lib_path + 'dataset0', data_lib_path + 'dataset-m0'
         logging.debug(f'dataset_serial: {0}.')
-        os.mkdir(path_data)
-        os.mkdir(path_data_m)
+        if not debug_mode:
+            os.mkdir(path_data)
+            os.mkdir(path_data_m)
         return path_data, path_data_m
 
     else:
-
-        dataset_serial = str(int(''.join(filter(str.isdigit, list_data_libs[-1])))+1)
+        dataset_serial = str(list_data_libs[-1] + 1)
+        logging.debug(f'list_data_libs={list_data_libs}.')
         logging.debug(f'dataset_serial: {dataset_serial}.')
         dataset_name = 'dataset'+dataset_serial
         dataset_m_name = 'dataset-m'+dataset_serial
         path_data, path_data_m = tuple(
-            ''.join(i) for i in zip(tuple((wd_path + '/', wd_path + '/')), tuple((dataset_name, dataset_m_name))))
-        os.mkdir(path_data)
-        os.mkdir(path_data_m)
+            ''.join(i) for i in zip(tuple((data_lib_path, data_lib_path)), tuple((dataset_name, dataset_m_name))))
+        if not debug_mode:
+            os.mkdir(path_data)
+            os.mkdir(path_data_m)
         return path_data, path_data_m
 
 
@@ -189,10 +197,10 @@ def main():
     # set broadcasting parameters
     raspberrypi_user = "pi"
     raspberrypi_ip = "192.168.11.115"
-    broadcast_port = str(8080)
+    broadcast_port = 8085
     port = 22
     raspberrypi_pwd = 'Mancave3090!'
-    path_to_stream = f'http://{raspberrypi_ip}:{broadcast_port}/?action=streaming'  # Wi-Fi Broadcast.
+    path_to_stream = f'http://{raspberrypi_ip}:{str(broadcast_port)}/?action=streaming'  # Wi-Fi Broadcast.
 
     # ssh connection
 
@@ -202,7 +210,7 @@ def main():
 
     # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    path_to_data_directory, path_to_masked_data_directory = set_working_directories(dir_path)
+    path_to_data_directory, path_to_masked_data_directory = set_working_directories(dir_path, debug_mode=True)
 
     # control
     logging.debug(f"Path to the data directory: {path_to_data_directory}")
@@ -213,9 +221,10 @@ def main():
     # delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
 
     """ create a video. """
-    SSH_open_camera(ssh)
+    #SSH_open_camera(ssh, sharpness=50, brightness=50, contrast=50, fps=90, res_x=1080, res_y=720, port=broadcast_port)
     # record_video(30, path_to_stream, path_to_data_directory)  # records a video
     SSH_shutdown_camera(ssh)
+
     """ apply mask. """
     # convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_fun, erode_function)
 
