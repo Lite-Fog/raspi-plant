@@ -11,13 +11,12 @@ import logging
 import re
 import paramiko
 import time
+import argparse
+# from PIL import Image
 
 # connect to docker daemon
 import docker
-dclient = docker.from_env()
-dclient.containers.run('ryanfb/visualsfm', 'echo hello world')
-import argparse
-from PIL import Image
+
 
 """ Raspi-plant interacting module """
 
