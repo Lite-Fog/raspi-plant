@@ -1,5 +1,4 @@
 import cv2
-
 import requests
 import numpy as np
 from datetime import datetime
@@ -31,15 +30,18 @@ def set_working_directories(wd_path, debug_mode=False):
     found in the search.
     :param wd_path: string.
     :param debug_mode: in debug_mode=True do not create new directories.
-    :return 2-tuple of paths for the new directories which was created.
+    :return 3-tuple of paths for the new directories which was created.
     """
     data_lib_path = wd_path + '/d/'
     list_subfolders_with_paths = [f.path.split('/')[-1] for f in os.scandir(wd_path + '/d/') if f.is_dir()]
     p_data, p_data_m = re.compile('^dataset[0-9]{1,3}'), re.compile('^dataset-m[0-9]{1,3}')  # new datasets' path
+    p_output = re.compile('^output[0-9]{1,3}')
     len_1 = len("dataset")
     len_2 = len("dataset-m")
+    len_3 = len("output")
     list_data_libs = sorted([int(s[len_1:]) for s in list_subfolders_with_paths if p_data.match(s)])
     list_data_m_libs = sorted([int(s[len_2:]) for s in list_subfolders_with_paths if p_data_m.match(s)])
+    list_output_libs = sorted([int(s[len_3:]) for s in list_subfolders_with_paths if p_output.match(s)])
 
     assert len(list_data_libs) == len(list_data_m_libs), "output libraries directories mismatched:" \
                                                          " please delete manually."
@@ -47,13 +49,15 @@ def set_working_directories(wd_path, debug_mode=False):
     if not list_data_libs:  # none datasets directories exist yet.
 
         path_data, path_data_m = data_lib_path + 'dataset0', data_lib_path + 'dataset-m0'
+        path_output = data_lib_path + 'output0'
 
         logging.debug(f'dataset_serial: {0}.')
 
         if not debug_mode:
             os.mkdir(path_data)
             os.mkdir(path_data_m)
-        return path_data, path_data_m
+            os.mkdir(path_output)
+        return path_data, path_data_m, path_output
 
     else:
         dataset_serial = str(list_data_libs[-1] + 1)
@@ -63,12 +67,14 @@ def set_working_directories(wd_path, debug_mode=False):
 
         dataset_name = 'dataset' + dataset_serial
         dataset_m_name = 'dataset-m' + dataset_serial
-        path_data, path_data_m = tuple(
-            ''.join(i) for i in zip(tuple((data_lib_path, data_lib_path)), tuple((dataset_name, dataset_m_name))))
+        output_name = 'output' + dataset_serial
+        path_data, path_data_m, path_output = tuple(
+            ''.join(i) for i in zip(tuple((data_lib_path, data_lib_path, data_lib_path)), tuple((dataset_name, dataset_m_name, output_name))))
         if not debug_mode:
             os.mkdir(path_data)
             os.mkdir(path_data_m)
-        return path_data, path_data_m
+            os.mkdir(path_output)
+        return path_data, path_data_m, path_output
 
 
 def SSH_open_camera(client, sharpness, brightness, contrast, fps, res_x, res_y, port=8080):
@@ -202,6 +208,8 @@ def convert_images_to_masked(input_dir, output_dir, mask_func, erode_func):
 def main():
     """ raspi- plant. """
 
+    DEBUG_MODE = True
+
     # set broadcasting parameters
     RASPI_USER = "pi"
     RASPI_PI_WIFI = "192.168.11.115"
@@ -230,18 +238,19 @@ def main():
 
     # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    path_to_data_directory, path_to_masked_data_directory = set_working_directories(dir_path, debug_mode=False)
+    path_to_data_directory, path_to_masked_data_directory, path_to_output_dir = set_working_directories(dir_path, debug_mode=DEBUG_MODE)
 
     # control
     logging.debug(f"Path to the data directory: {path_to_data_directory}")
     logging.debug(f"Path to the masked-data directory: {path_to_masked_data_directory}")
+    logging.debug(f"Path to output directory: {path_to_output_dir}")
 
     # delete content from existing directories.
     # delete_data(path_to_data_directory)  # deletes content of the data library
     # delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
 
     """ create a video. """
-    #SSH_open_camera(ssh, sharpness=50, brightness=50, contrast=60, fps=90, res_x=1080, res_y=720, port=RASPI_BROADCAST_PORT)
+    #SSH_open_camera(ssh, sharpness=50, brightness=50, contrast=60, fps=2, res_x=1080, res_y=720, port=RASPI_BROADCAST_PORT)
     #record_video(28, path_to_stream, path_to_data_directory)  # records a video
     #SSH_shutdown_camera(ssh)
 
@@ -253,8 +262,9 @@ def main():
     """ apply mask. """
     convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_images, erode_function)
 
-    dclient = docker.from_env()
-    print(dclient.containers.run('ryanfb/visualsfm', 'echo hello world'))
+    """ docker VisualSFM"""
+    #dclient = docker.from_env()
+    #print(dclient.containers.run('ryanfb/visualsfm', 'echo hello world'))
 
 
 if __name__ == "__main__":
