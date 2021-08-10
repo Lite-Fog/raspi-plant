@@ -29,51 +29,50 @@ def set_working_directories(wd_path, debug_mode=False):
     the applicable form, and then creates 2 new directories with a successive serial number according to the last one
     found in the search.
     :param wd_path: string.
-    :param debug_mode: in debug_mode=True do not create new directories.
+    :param debug_mode: if debug_mode=True it doesn't create new directories.
     :return 3-tuple of paths for the new directories which was created.
     """
     data_lib_path = wd_path + '/d/'
     list_subfolders_with_paths = [f.path.split('/')[-1] for f in os.scandir(wd_path + '/d/') if f.is_dir()]
     p_data, p_data_m = re.compile('^dataset[0-9]{1,3}'), re.compile('^dataset-m[0-9]{1,3}')  # new datasets' path
-    p_output = re.compile('^output[0-9]{1,3}')
+    # p_output = re.compile('^output[0-9]{1,3}')
     len_1 = len("dataset")
     len_2 = len("dataset-m")
-    len_3 = len("output")
+    # len_3 = len("output")
     list_data_libs = sorted([int(s[len_1:]) for s in list_subfolders_with_paths if p_data.match(s)])
     list_data_m_libs = sorted([int(s[len_2:]) for s in list_subfolders_with_paths if p_data_m.match(s)])
-    list_output_libs = sorted([int(s[len_3:]) for s in list_subfolders_with_paths if p_output.match(s)])
+    # list_output_libs = sorted([int(s[len_3:]) for s in list_subfolders_with_paths if p_output.match(s)])
 
     assert len(list_data_libs) == len(list_data_m_libs), "output libraries directories mismatched:" \
                                                          " please delete manually."
 
     if not list_data_libs:  # none datasets directories exist yet.
 
-        path_data, path_data_m = data_lib_path + 'dataset0', data_lib_path + 'dataset-m0'
-        path_output = data_lib_path + 'output0'
+        dataset_serial = str(0)
+        logging.debug(f'dataset_serial: {dataset_serial}.')
 
-        logging.debug(f'dataset_serial: {0}.')
+    else:
+        if debug_mode:
+            dataset_serial = str(list_data_libs[-1])
+            logging.debug(f'dataset_serial: {dataset_serial}.')
+        else:
+            dataset_serial = str(list_data_libs[-1] + 1)
+            logging.debug(f'dataset_serial: {dataset_serial}.')
 
-        if not debug_mode:
-            os.mkdir(path_data)
-            os.mkdir(path_data_m)
-            os.mkdir(path_output)
+    dataset_name = 'dataset' + dataset_serial
+    dataset_m_name = 'dataset-m' + dataset_serial
+    output_name = 'output' + dataset_serial
+    path_data, path_data_m, path_output = tuple(
+                ''.join(i) for i in zip(tuple((data_lib_path, data_lib_path, data_lib_path)),
+                                        tuple((dataset_name, dataset_m_name, output_name))))
+
+    if debug_mode:
         return path_data, path_data_m, path_output
 
     else:
-        dataset_serial = str(list_data_libs[-1] + 1)
-
-        logging.debug(f'list_data_libs={list_data_libs}.')
-        logging.debug(f'dataset_serial: {dataset_serial}.')
-
-        dataset_name = 'dataset' + dataset_serial
-        dataset_m_name = 'dataset-m' + dataset_serial
-        output_name = 'output' + dataset_serial
-        path_data, path_data_m, path_output = tuple(
-            ''.join(i) for i in zip(tuple((data_lib_path, data_lib_path, data_lib_path)), tuple((dataset_name, dataset_m_name, output_name))))
-        if not debug_mode:
-            os.mkdir(path_data)
-            os.mkdir(path_data_m)
-            os.mkdir(path_output)
+        os.mkdir(path_data)
+        os.mkdir(path_data_m)
+        os.mkdir(path_output)
         return path_data, path_data_m, path_output
 
 
@@ -145,11 +144,11 @@ def record_video(length_secs, path_to_stream, path_to_data):
         print("Received unexpected status code {}".format(r.status_code))
 
 
-def mask_images(img_path, erode_func, output_lib, sbool=False, output_ext=".jpg"):
+def mask_images(img_path, erode_func, output_lib, output_ext=".jpg"):
     """:param img_path: string, path to the image.
        :param erode_func: function, masking function.
        :param output_lib: string, path to output directory.
-       :param sbool: boolean, if True it will save the masked image, default Fahttps://github.com/ryanfb/docker_visualsfm.gitlse.
+       :param debug: boolean, if False it will save the masked image.
        :param output_ext: string, type of output image, default jpg.
 
        :returns np.arrays of g_img, mask_g and img
@@ -182,8 +181,8 @@ def mask_images(img_path, erode_func, output_lib, sbool=False, output_ext=".jpg"
     # erosion
     g_img, mask, img = erode_func(img, mask_g)
 
-    if sbool:  # save to directory
-        cv2.imwrite(g_img_path, g_img)
+    # save to directory
+    cv2.imwrite(g_img_path, g_img)
 
     return g_img, mask, img
 
@@ -202,7 +201,7 @@ def convert_images_to_masked(input_dir, output_dir, mask_func, erode_func):
     input_files_names = glob.glob(input_dir + '/*')
     logging.debug(f'Number of frames to mask: {len(input_files_names)}.')
     for file in input_files_names:
-        mask_func(file, erode_func, output_lib=output_dir, sbool=True)
+        mask_func(file, erode_func, output_lib=output_dir)
 
 
 def main():
@@ -227,14 +226,8 @@ def main():
     parser.add_argument("-sa", "--algorithm",
                         help="choose algorithm: False (default) for full search, True for LSH", nargs='+',
                         type=bool, default=False)
-    parser.add_argument("-R", "--report", help="create visual report", action="store_true")
 
     args = parser.parse_args()
-
-    # ssh connection
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(RASPI_PI_ETHERNET, SSH_PORT, RASPI_USER, RASPI_PWD)
 
     # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -249,13 +242,18 @@ def main():
     # delete_data(path_to_data_directory)  # deletes content of the data library
     # delete_data(path_to_masked_data_directory)  # deletes content of the masked data library
 
+    # ssh connection
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(RASPI_PI_ETHERNET, SSH_PORT, RASPI_USER, RASPI_PWD)
+
     """ create a video. """
     #SSH_open_camera(ssh, sharpness=50, brightness=50, contrast=60, fps=2, res_x=1080, res_y=720, port=RASPI_BROADCAST_PORT)
     #record_video(28, path_to_stream, path_to_data_directory)  # records a video
     #SSH_shutdown_camera(ssh)
 
     logging.info(f"SSH transport is: {ssh.get_transport().active}")
-    logging.info("closing SSH.. ")
+    logging.info("closing SSH connection: ")
     ssh.close()
     logging.info("SSH transport is now closed")
 
