@@ -20,17 +20,18 @@ import docker
 """ Raspi-plant interacting module """
 
 # create logger with 'spam_application'
-logging.getLogger('Raspi_application')
+logging.getLogger('Raspi- application')
 logging.basicConfig(stream=sys.stdout, filemode='a', level=logging.DEBUG)
 
 
 def set_working_directories(wd_path, debug_mode=False):
-    """ function receives the working directory path <wd_path>, searches for all occurrences of dataset written in
-    the applicable form, and then creates 2 new directories with a successive serial number according to the last one
-    found in the search.
-    :param wd_path: string.
+    """ function receives the working directory path <wd_path>, searches for datasets' occurrences, and then creates
+    two new directories with a successive serial number according to the last one found in the search.
+    :param
+    wd_path: string.
     :param debug_mode: if debug_mode=True it doesn't create new directories.
-    :return 3-tuple of paths for the new directories which was created.
+    :return 3-tuple of
+    paths for the new directories which was created.
     """
     data_lib_path = wd_path + '/d/'
     list_subfolders_with_paths = [f.path.split('/')[-1] for f in os.scandir(wd_path + '/d/') if f.is_dir()]
@@ -46,7 +47,7 @@ def set_working_directories(wd_path, debug_mode=False):
     assert len(list_data_libs) == len(list_data_m_libs), "output libraries directories mismatched:" \
                                                          " please delete manually."
 
-    if not list_data_libs:  # none datasets directories exist yet.
+    if not list_data_libs:  # no datasets directories exist yet.
 
         dataset_serial = str(0)
         logging.debug(f'dataset_serial: {dataset_serial}.')
@@ -54,26 +55,23 @@ def set_working_directories(wd_path, debug_mode=False):
     else:
         if debug_mode:
             dataset_serial = str(list_data_libs[-1])
-            logging.debug(f'dataset_serial: {dataset_serial}.')
         else:
             dataset_serial = str(list_data_libs[-1] + 1)
-            logging.debug(f'dataset_serial: {dataset_serial}.')
 
+    logging.debug(f'dataset_serial: {dataset_serial}.')
     dataset_name = 'dataset' + dataset_serial
     dataset_m_name = 'dataset-m' + dataset_serial
     output_name = 'output' + dataset_serial
     path_data, path_data_m, path_output = tuple(
-                ''.join(i) for i in zip(tuple((data_lib_path, data_lib_path, data_lib_path)),
+                ''.join(i) for i in zip(tuple([data_lib_path]*3),
                                         tuple((dataset_name, dataset_m_name, output_name))))
 
-    if debug_mode:
-        return path_data, path_data_m, path_output
-
-    else:
+    if not debug_mode:  # create new directories.
         os.mkdir(path_data)
         os.mkdir(path_data_m)
         os.mkdir(path_output)
-        return path_data, path_data_m, path_output
+
+    return path_data, path_data_m, path_output
 
 
 def SSH_open_camera(client, sharpness, brightness, contrast, fps, res_x, res_y, port=8080):
@@ -81,12 +79,11 @@ def SSH_open_camera(client, sharpness, brightness, contrast, fps, res_x, res_y, 
      :params: <mjpg-streamer parameters>"""
     OPENING_CAMERA_CMD = f"mjpg_streamer -i \"input_raspicam.so -br {brightness} -co {contrast} -sh {sharpness} -x {res_x}  -y {res_y}  -fps {fps}\" -o \'output_http.so -p {port}\'"
     logging.debug('opening_camera_CMD: {0}'.format(OPENING_CAMERA_CMD))
-    # stdin, stdout, stderr = client.exec_command("./startcam.sh")
     stdin, stdout, stderr = client.exec_command(OPENING_CAMERA_CMD)
     time.sleep(1)  # bug fix: AttributeError
     for i in reversed(range(10)):
         time.sleep(1)
-        logging.debug(f"sleeping time... {i}")
+        logging.debug(f"sleeping time..: {i}")
 
     return stdin, stdout, stderr
 
@@ -95,11 +92,11 @@ def SSH_shutdown_camera(client):
     """SSH script to end broadcasting on the remote host"""
     stdin, stdout, stderr = client.exec_command("ps aux")
     time.sleep(1)  # bug fix: AttributeError
-    data = stdout.readlines()
+    data = stdout.readlines()  # retrieve processes output.
     for line in data:
         if line.find('mjpg_streamer') != -1:
             process_to_kill = re.findall('\d+', line)[0]
-            stdin, stdout, stderr = client.exec_command(f"kill {process_to_kill}")
+            stdin, stdout, stderr = client.exec_command(f"kill {process_to_kill}")  # execute process.
             time.sleep(1)  # bug fix: AttributeError
             logging.debug(f'process {process_to_kill} is now gone.')
             return stdin, stdout, stderr
@@ -133,7 +130,7 @@ def record_video(length_secs, path_to_stream, path_to_data):
             if a != -1 and b != -1:
                 jpg = bytes_loc[a:b + 2]  # actual image
                 bytes_loc = bytes_loc[b + 2:]  # other information
-                # decode to colored image ( another option is cv2.IMREAD_GRAYSChttps://github.com/ryanfb/docker_visualsfm.gitALE)
+                # decode to colored image
                 i = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
                 datetimeobj = datetime.now()  # get time stamp
                 cv2.imwrite(path_to_data + '/img' + str(datetimeobj) + '.jpg', i)
@@ -141,7 +138,7 @@ def record_video(length_secs, path_to_stream, path_to_data):
                     logging.debug('End recording.')
                     break  # exit program
     else:
-        print("Received unexpected status code {}".format(r.status_code))
+        logging.error("Received unexpected status code {}".format(r.status_code))
 
 
 def mask_images(img_path, erode_func, output_lib, output_ext=".jpg"):
