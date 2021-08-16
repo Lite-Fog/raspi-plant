@@ -141,19 +141,21 @@ def record_video(length_secs, path_to_stream, path_to_data):
         logging.error("Received unexpected status code {}".format(r.status_code))
 
 
-def mask_images(img_path, erode_func, output_lib, output_ext=".jpg"):
+def mask_images(img_path, erode_func, output_lib, params, output_ext=".jpg"):
     """:param img_path: string, path to the image.
        :param erode_func: function, masking function.
        :param output_lib: string, path to output directory.
-       :param debug: boolean, if False it will save the masked image.
        :param output_ext: string, type of output image, default jpg.
+       :param params: dictionary mask- parameters.
 
        :returns np.arrays of g_img, mask_g and img
 
        """
-    # set cropping parameters:
-    hlc, hrc = 0, 1000
-    vlc, vuc = 0, 670
+
+    # set cropping and masking parameters:
+    hlc, hrc, vlc, vuc = params["hlc"], params["hrc"], params["vlc"], params["vuc"]
+    n, n_iter = params["n"], params["n_iter"]
+
     # extract img name:
     img_name = os.path.splitext(Path(img_path).name)[0]
 
@@ -176,7 +178,7 @@ def mask_images(img_path, erode_func, output_lib, output_ext=".jpg"):
     mask_g[mask_g != 0] = 255
 
     # erosion
-    g_img, mask, img = erode_func(img, mask_g)
+    g_img, mask, img = erode_func(img, mask_g, n, n_iter)
 
     # save to directory
     cv2.imwrite(g_img_path, g_img)
@@ -184,7 +186,7 @@ def mask_images(img_path, erode_func, output_lib, output_ext=".jpg"):
     return g_img, mask, img
 
 
-def erode_function(img, mask, n=2, ite=1):
+def erode_function(img, mask, n, ite):
     kernel = np.ones((n, n), np.uint8)
     mask_erosion = cv2.erode(mask, kernel, iterations=ite)
     imask_erosion = mask_erosion == 0
@@ -194,11 +196,11 @@ def erode_function(img, mask, n=2, ite=1):
     return g_img, mask_erosion, img
 
 
-def convert_images_to_masked(input_dir, output_dir, mask_func, erode_func):
+def convert_images_to_masked(input_dir, output_dir, mask_func, erode_func, mask_params):
     input_files_names = glob.glob(input_dir + '/*')
     logging.debug(f'Number of frames to mask: {len(input_files_names)}.')
     for file in input_files_names:
-        mask_func(file, erode_func, output_lib=output_dir)
+        mask_func(file, erode_func, output_dir, mask_params)
 
 
 def main():
@@ -255,7 +257,10 @@ def main():
     logging.info("SSH transport is now closed")
 
     """ apply mask. """
-    convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_images, erode_function)
+
+    mask_params = {"hlc": 0, "hrc": 800, "vlc": 0, "vuc": 600, "n": 2, "n_iter": 3}
+    convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_images, erode_function,
+                             mask_params)
 
     """ docker VisualSFM"""
     #dclient = docker.from_env()
