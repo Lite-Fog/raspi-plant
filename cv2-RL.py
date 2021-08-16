@@ -263,7 +263,7 @@ def main():
                              mask_params)
 
     """ docker VisualSFM"""
-    #dclient = docker.from_env()
+    #dclient = docker.from_env()f
     #print(dclient.containers.run('ryanfb/visualsfm', 'echo hello world'))
 
 
