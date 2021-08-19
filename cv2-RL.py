@@ -165,6 +165,7 @@ def mask_images(img_path, erode_func, output_lib, params, output_ext=".jpg"):
     img = cv2.imread(img_path)[vlc:vuc, hlc:hrc]  # cv2 read & crop
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)  # convert to hsv
     mask = cv2.inRange(hsv, (35, 25, 25), (80, 255, 255))  # mask by slicing the green spectrum
+    #mask = cv2.inRange(hsv, (0, 42, 0), (179, 255, 255)) # everything except white
 
     # apply the masking:
     imask = mask > 0
@@ -258,13 +259,12 @@ def main():
 
     """ apply mask. """
 
-    mask_params = {"hlc": 0, "hrc": 800, "vlc": 0, "vuc": 600, "n": 2, "n_iter": 3}
+    mask_params = {"hlc": 0, "hrc": 800, "vlc": 0, "vuc": 580, "n": 4, "n_iter": 10}
     convert_images_to_masked(path_to_data_directory, path_to_masked_data_directory, mask_images, erode_function,
                              mask_params)
 
-    """ docker VisualSFM"""
-    #dclient = docker.from_env()f
-    #print(dclient.containers.run('ryanfb/visualsfm', 'echo hello world'))
+    """ docker COLMAP"""
+    #client = docker.from_env()f
 
 
 if __name__ == "__main__":
