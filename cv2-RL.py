@@ -14,14 +14,18 @@ import paramiko
 import time
 import argparse
 import docker
+import open3d as o3d
+
 
 # parser
 parser = argparse.ArgumentParser(description="Raspi-plant")
 parser.add_argument("-rec", "--record", default=28, help="make a video", type=int)
 parser.add_argument("-deb", "--debug", default=False, help="end streaming", type=bool)
-parser.add_argument("-col", "--colmap", default=True, help="run colmap from docker container", type=bool)
+parser.add_argument("-col", "--colmap", default=False, help="run colmap from docker container", type=bool)
 parser.add_argument("-dele", "--delete", default=False, help="delete working directory", type=bool)
-parser.add_argument("-mask", "--masking", default=True, help="mask images", type=bool)
+parser.add_argument("-mask", "--masking", default=False, help="mask images", type=bool)
+parser.add_argument("-out", "--outliers", default=False, help="remove outliers: white pixels and isolated points", type=bool)
+parser.add_argument("-p", "--poisson", default=False, help="create poisson mesh and save file", type=bool)
 
 
 FLAGS = parser.parse_args()
@@ -241,11 +245,32 @@ def _execute_colmap_command(cl, cmd, mount_dict, wd, container_name='colmap:test
                              auto_remove=True)
 
 
+def create_outliers_list(pcd):
+    # Convert open3d format to numpy array
+    pcd_colors = np.asarray(pcd.colors) * 255
+    pcd_colors_summed = np.expand_dims(pcd_colors.sum(axis=1), axis=1)
+    return np.where(np.any(pcd_colors_summed > 720, axis=1))[0].tolist()
+
+
+def remove_outliers(cloud, ind):
+    inlier_cloud = cloud.select_by_index(ind, invert=True)
+    outlier_cloud = cloud.select_by_index(ind, invert=False)
+    return inlier_cloud.remove_radius_outlier(nb_points=100, radius=0.1)[0], outlier_cloud
+
+
+def poisson_reconstruction(pcd):
+    return o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=12, width=0, scale=1.1, linear_fit=False)[0]
+
+
 def main():
     # set working directories, input and output.
     dir_path = os.path.dirname(os.path.realpath(__file__))
     path_to_data_directory, path_to_masked_data_directory, path_to_output_dir, serial = set_working_directories(
         dir_path, debug_mode=FLAGS.debug)
+
+    input_dense = path_to_output_dir + '/dense.ply'
+    output_inlier_cloud = path_to_output_dir + '/dense_inlier.ply'
+    output_poisson = path_to_output_dir + '/poisson.ply'
 
     # logging control
     logging.debug(f"Path to the data directory: {path_to_data_directory}")
@@ -326,6 +351,21 @@ def main():
                        "patch_match_stereo": CMD5, "stereo_fusion": CMD6, "model_converter": CMD7}
 
         run_colmap(client, colmap_cmds, mount_dict, DATASET_PATH)
+
+    """outliers removal"""
+    if FLAGS.outliers:
+        pcd = o3d.io.read_point_cloud(input_dense)
+        inlier_cloud, outlier_cloud = remove_outliers(pcd, create_outliers_list(pcd))
+        logging.info(f"number of points removed by knn:{len(pcd.points)-len(inlier_cloud.points)}")
+        #  save to file
+        o3d.io.write_point_cloud(output_inlier_cloud, inlier_cloud, write_ascii=True, compressed=False, print_progress=False)
+
+    """poisson meshing"""
+    if FLAGS.poisson:
+        pcd = o3d.io.read_point_cloud(output_inlier_cloud) if Path(output_inlier_cloud).is_file() \
+            else o3d.io.read_point_cloud(input_dense)
+        poisson_mesh = poisson_reconstruction(pcd)
+        o3d.io.write_triangle_mesh(output_poisson, poisson_mesh, write_ascii=True, compressed=False)
 
 
 if __name__ == "__main__":

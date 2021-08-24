@@ -1,1 +1,1 @@
-python cv2-RL.py --colmap True
+python cv2-RL.py --outliers True --poisson True --debug True --record 0
