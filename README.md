@@ -1,5 +1,4 @@
-# raspi-plant
+# raspi-plant v.1
 
 
-
-COLMAP point clouding and RasperryPI 4 camera control.
+COLMAP point clouding and RasperryPI 4 camera control. 
