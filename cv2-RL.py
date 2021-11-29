@@ -34,10 +34,11 @@ FLAGS = parser.parse_args()
 RASPI_USER = "pi"
 RASPI_PI_WIFI = "192.168.11.115"
 RASPI_PI_ETHERNET = "10.150.180.52"
-RASPI_PWD = 'Mancave3090!'
+RASPI_PWD = '1234'
 RASPI_BROADCAST_PORT = 8085
 SSH_PORT = 22
 PATH_TO_STREAM = f'http://{RASPI_PI_ETHERNET}:{str(RASPI_BROADCAST_PORT)}/?action=streaming'  # Wi-Fi Broadcast.
+
 # container's structure.
 DATASET_PATH = "/root/data"
 DATABASE_PATH = "/root/data/output/database.db"
@@ -105,7 +106,7 @@ def set_working_directories(wd_path, debug_mode=False):
 
 def SSH_open_camera(client, sharpness, brightness, contrast, fps, res_x, res_y, port=8080):
     """SSH script to start broadcasting on the remote host.
-     :params: <mjpg-streamer parameters>"""
+     :params: <mjpg-streamer parametetruers>"""
     OPENING_CAMERA_CMD = f"mjpg_streamer -i \"input_raspicam.so -br {brightness} -co {contrast} -sh {sharpness} -x {res_x}  -y {res_y}  -fps {fps}\" -o \'output_http.so -p {port}\'"
     logging.debug('opening_camera_CMD: {0}'.format(OPENING_CAMERA_CMD))
     stdin, stdout, stderr = client.exec_command(OPENING_CAMERA_CMD)
@@ -285,7 +286,7 @@ def main():
     # ssh connection
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(RASPI_PI_ETHERNET, SSH_PORT, RASPI_USER, RASPI_PWD)
+    ssh.connect(RASPI_PI_WIFI, SSH_PORT, RASPI_USER, RASPI_PWD)
 
     """ record a video. """
     if FLAGS.record and FLAGS.record != 0:
